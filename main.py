@@ -1,35 +1,24 @@
-
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse  # ✅ Correção aqui!
+from fastapi import FastAPI, Request, Form, Depends
 from fastapi.templating import Jinja2Templates
-import requests
+import httpx
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-API_KEY = "e7520055e0b2baf1bc8b3f4cbc94b12b"
-BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
+API_KEY = "e7520055e0b2baf1bc8b3f4cbc94b12b" # Substitua pela sua chave da API de clima
+WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&lang=pt&units=metric"
 
-@app.get("/weather/{city}", response_class=HTMLResponse)
-def get_weather(request: Request, city: str):
-    params = {
-        "q": city,
-        "appid": API_KEY,
-        "units": "metric",
-        "lang": "pt"
-    }
-    response = requests.get(BASE_URL, params=params)
+@app.get("/")
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request, "weather": None})
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Erro ao obter a previsão do tempo")
-
-    data = response.json()
-    return templates.TemplateResponse("weather.html", {
-        "request": request,
-        "cidade": data["name"],
-        "temperatura": data["main"]["temp"],
-        "descricao": data["weather"][0]["description"].capitalize(),
-        "umidade": data["main"]["humidity"],
-        "vento": data["wind"]["speed"]
-    })
-
+@app.post("/")
+async def get_weather(request: Request, city: str = Form(...)):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(WEATHER_URL.format(city=city, api_key=API_KEY))
+    
+    if response.status_code == 200:
+        weather_data = response.json()
+        return templates.TemplateResponse("index.html", {"request": request, "weather": weather_data})
+    
+    return templates.TemplateResponse("index.html", {"request": request, "weather": None, "error": "Cidade não encontrada!"})
